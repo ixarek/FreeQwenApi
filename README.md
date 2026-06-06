@@ -6,7 +6,7 @@
 ## Особенности
 
 - **Автозапуск**: работает как системный сервис через PM2, не требует ручного вмешательства
-- **Изолированная рабочая среда**: отдельная папка `/home/openclaw/qwen-service-workspace`
+- **Работает из репозитория**: пути PM2 вычисляются относительно папки проекта (`__dirname`)
 - **OpenAI-compatible API**: `http://localhost:3264/api`
 - **28 моделей Qwen Chat**: включая qwen3.7-max, qwen3-coder-plus, qwen3-vl-plus
 - **Генерация изображений и видео**: через Qwen Chat без DASHSCOPE_API_KEY
@@ -16,17 +16,27 @@
 ## Быстрый старт
 
 ```bash
-cd /home/openclaw/qwen-service-workspace
-npm install
-npm run auth          # добавить аккаунт Qwen Chat
+git clone <repo-url> FreeQwenApi
+cd FreeQwenApi
+npm run auth          # добавить аккаунт Qwen Chat (хотя бы один)
 npm run models:sync   # обновить список моделей
-pm2 start ecosystem.config.cjs
-pm2 save
+npm run setup         # установить зависимости + PM2 и запустить сервис
 ```
+
+`npm run setup` сам устанавливает зависимости, ставит PM2 (если его нет),
+создаёт папку логов, запускает сервис и сохраняет конфигурацию PM2.
+Все пути в `ecosystem.config.cjs` вычисляются относительно репозитория,
+поэтому установка работает из любой папки.
 
 ## Автозапуск (PM2)
 
-Сервис настроен на автоматический запуск через PM2:
+Проще всего поднять сервис одной командой:
+
+```bash
+npm run setup
+```
+
+Либо вручную:
 
 ```bash
 # Запустить сервис
@@ -35,10 +45,10 @@ pm2 start ecosystem.config.cjs
 # Сохранить конфигурацию для автозапуска
 pm2 save
 
-# Настроить startup-скрипт (требуется один раз)
-sudo env PATH=$PATH:/home/openclaw/.hermes/node/bin \
-  /home/openclaw/.hermes/node/lib/node_modules/pm2/bin/pm2 startup systemd \
-  -u openclaw --hp /home/openclaw
+# Настроить startup-скрипт (требуется один раз, нужен sudo)
+pm2 startup
+# PM2 выведет готовую команду 'sudo env PATH=... pm2 startup systemd -u <user> ...'
+# — скопируйте и выполните её, затем снова 'pm2 save'.
 ```
 
 После настройки startup-скрипта сервис будет автоматически запускаться при перезагрузке системы.
@@ -62,7 +72,7 @@ module.exports = {
   apps: [{
     name: 'qwen-free-api',
     script: 'index.js',
-    cwd: '/home/openclaw/qwen-service-workspace',
+    cwd: __dirname,            // путь к репозиторию вычисляется автоматически
     env: {
       NODE_ENV: 'production',
       PORT: 3264,
@@ -139,8 +149,8 @@ custom_providers:
 ## Структура проекта
 
 ```
-/home/openclaw/qwen-service-workspace/
-├── ecosystem.config.cjs    # PM2 конфигурация
+FreeQwenApi/                # корень репозитория (любая папка)
+├── ecosystem.config.cjs    # PM2 конфигурация (пути относительно репозитория)
 ├── index.js                # основной сервер
 ├── session/                # токены аккаунтов (не коммитить!)
 │   ├── tokens.json

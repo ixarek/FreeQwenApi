@@ -14,6 +14,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { listTokens, markInvalid, markRateLimited, markValid } from './tokenManager.js';
 import { FORGETMEAI_WATERMARK } from '../utils/branding.js';
+import { normalizeUsage } from '../utils/usage.js';
 
 // Функция для генерирования детерминированного chatId на основе истории
 function generateChatIdFromHistory(messages) {
@@ -603,7 +604,7 @@ function buildOpenAIToolResponse(result, mappedModel, toolCalls) {
             },
             finish_reason: 'tool_calls'
         }],
-        usage: result.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        usage: normalizeUsage(result.usage),
         chatId: result.chatId,
         parentId: result.parentId || result.response_id,
         x_qwen_chat_id: result.chatId,
@@ -715,7 +716,7 @@ function handleNonStreamingResponse(res, result, mappedModel) {
         created: Math.floor(Date.now() / 1000),
         model: result.model || mappedModel,
         choices: result.choices || [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop' }],
-        usage: result.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        usage: normalizeUsage(result.usage),
         chatId: result.chatId,
         parentId: result.parentId
     });
@@ -1249,6 +1250,19 @@ router.post('/chat/completions', async (req, res) => {
                         { index: 0, delta: {}, finish_reason: 'stop' }
                     ]
                 });
+                // OpenAI stream_options.include_usage: отдельный финальный чанк
+                // с пустым choices и нормализованным usage (prompt_tokens и т.д.).
+                // Нужно клиентам вроде Hermes для подсчёта заполнения контекста.
+                if (req.body?.stream_options?.include_usage) {
+                    writeSse({
+                        id: 'chatcmpl-stream',
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: mappedModel || 'qwen-max-latest',
+                        choices: [],
+                        usage: normalizeUsage(result.usage)
+                    });
+                }
                 res.write('data: [DONE]\n\n');
                 res.end();
 
@@ -1305,11 +1319,7 @@ router.post('/chat/completions', async (req, res) => {
                     },
                     finish_reason: "stop"
                 }],
-                usage: result.usage || {
-                    prompt_tokens: 0,
-                    completion_tokens: 0,
-                    total_tokens: 0
-                },
+                usage: normalizeUsage(result.usage),
                 chatId: result.chatId,
                 parentId: result.parentId
             };
@@ -1572,6 +1582,19 @@ router.post('/v1/chat/completions', async (req, res) => {
                         { index: 0, delta: {}, finish_reason: 'stop' }
                     ]
                 });
+                // OpenAI stream_options.include_usage: отдельный финальный чанк
+                // с пустым choices и нормализованным usage (prompt_tokens и т.д.).
+                // Нужно клиентам вроде Hermes для подсчёта заполнения контекста.
+                if (req.body?.stream_options?.include_usage) {
+                    writeSse({
+                        id: 'chatcmpl-stream',
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: mappedModel || 'qwen-max-latest',
+                        choices: [],
+                        usage: normalizeUsage(result.usage)
+                    });
+                }
                 res.write('data: [DONE]\n\n');
                 res.end();
 
@@ -1638,11 +1661,7 @@ router.post('/v1/chat/completions', async (req, res) => {
                     },
                     finish_reason: "stop"
                 }],
-                usage: result.usage || {
-                    prompt_tokens: 0,
-                    completion_tokens: 0,
-                    total_tokens: 0
-                },
+                usage: normalizeUsage(result.usage),
                 // Передаём метаданные для сохранения контекста
                 x_qwen_chat_id: result.chatId,
                 x_qwen_parent_id: result.parentId || result.response_id
